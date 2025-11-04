@@ -2,15 +2,18 @@
  *@NApiVersion 2.1
  *@NScriptType Suitelet
  */
-define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (serverWidget, log, render, file, record) => {
+define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record', 'N/search'], (serverWidget, log, render, file, record, search) => {
     const CASH_SALE = 'cashsale';
     const CREDIT_MEMO = 'creditmemo';
     let FOLDER_NS = '';
     const FOLDER = 1566; //SB: 1566 - PR: 1566
-    const FOLDER_CM = 2090; //SB: 2090 - PR: -
+    const FOLDER_CM = 29443; //SB: 2090 - PR: 29443
     const TEMPLATE = 17455; //SB: 17455 - PR: 17455
     const TEMPLATE_TICKET = 17456; //SB: 17456 - PR: 17456
-    const TEMPLATE_CM = '40000'; //SB: 40000 - PR: -
+    const TEMPLATE_CM = 169797; //SB: 40000 - PR: 169797
+    const TEMPLATE_CAMBIO = 5247677; //SB: 3553574  - PR: 5247677
+    const TEMPLATE_DESCUENTO = 5247681; //SB: 3553575 - PR: 5247681
+    const TEMPLATE_TAX_FREE = 7102766; //SB: 3555270 - PR: 7102766
     const URL_SB = 'https://6785603-sb1.app.netsuite.com/core/media/media.nl?id=83188&c=6785603_SB1&h=HGzPgiCxcHYE32rpKPQcmiQE0YVbqhxBrZ8DMiE_d_D2EsAS&_xt=.js'
     const URL_PR = 'https://6785603.app.netsuite.com/core/media/media.nl?id=17458&c=6785603&h=bVXwt5XcnTy0mmKtgFsPQRTiWWXJNPN95G0gCJVP9rGuZd5U&_xt=.js'
     const onRequest = (context) => {
@@ -19,7 +22,11 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
             const param_tranid = context.request.parameters.custparam_tranid;
             const param_printer = context.request.parameters.custparam_printer;
             const param_rectype = context.request.parameters.custparam_rectype;
-            log.debug('Params', param_internalid + ' - ' + param_tranid + ' - ' + param_printer + ' - ' + param_rectype);
+            const param_location = context.request.parameters.custparam_location;
+            const param_date = context.request.parameters.custparam_date;
+            const param_total = context.request.parameters.custparam_total;
+            log.debug('Params', param_internalid + ' - ' + param_tranid + ' - ' + param_printer + ' - ' + param_rectype + ' - ' + param_location
+                + ' - ' + param_date + ' - ' + param_total);
             let impresora = 'POS-80';
             impresora = param_printer;
 
@@ -40,9 +47,55 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
                 label_btn = 'Nota de Crédito';
             }
 
-            const pdfBase64 = createFile(param_internalid, nameFile, TEMPLATE_REC, param_rectype);
-            const pdfBase64Ticket = createFile(param_internalid, nameFaileTicket, TEMPLATE_TICKET, param_rectype);
+            const pdfBase64 = createFile(param_internalid, nameFile, TEMPLATE_REC, param_rectype, '', '', 0);
+            const pdfBase64Ticket = createFile(param_internalid, nameFaileTicket, TEMPLATE_TICKET, param_rectype, '', '', 0);
+            var pdfBase64Cambio = '';
+            var pdfBase64Descuento = '';
+            var pdfBase64TaxFree = '';
 
+            var ubicacion = [];
+
+            if (param_rectype == CASH_SALE) {
+                ubicacion = getUbicacion(param_location);
+                let fechaParametro = parseDate(param_date);
+                log.error('ubicacion', ubicacion);
+
+                let recordData = record.load({ type: param_rectype, id: param_internalid });
+                let isTaxFree = recordData.getValue('custbody_pe_tax_free');
+
+                if (isTaxFree) {
+                    let nameFileTaxFree = param_tranid + '-TaxFree';
+                    pdfBase64TaxFree = createFile(param_internalid, nameFileTaxFree, TEMPLATE_TAX_FREE, param_rectype, '', '', 0);
+                    log.debug('Tax Free PDF generado', nameFileTaxFree);
+                }
+
+                if (ubicacion[0] == true) {
+                    let fini_cambio = parseDate(ubicacion[1]);
+                    let ffin_cambio = parseDate(ubicacion[2]);
+                    let nota_cambio = ubicacion[3]
+                    let nameFileCambio = param_tranid + '-TicketCambio';
+                    let montoParametro = Number(param_total).toFixed(2);
+                    if (fini_cambio <= fechaParametro <= ffin_cambio) {
+                        pdfBase64Cambio = createFile(param_internalid, nameFileCambio, TEMPLATE_CAMBIO, param_rectype, nota_cambio, '', montoParametro);
+                    }
+                }
+
+                if (ubicacion[4] == true) {
+                    let fini_desc = parseDate(ubicacion[5]);
+                    let ffin_desc = parseDate(ubicacion[6]);
+                    let monto_min = Number(ubicacion[7]).toFixed(2);
+                    let montoParametro = Number(param_total).toFixed(2);
+                    let nota_descuento = ubicacion[8];
+                    let nameFileDesc = param_tranid + '-TicketDescuento';
+
+                    if ((fini_desc <= fechaParametro <= ffin_desc) && (montoParametro >= monto_min)) {
+                        pdfBase64Descuento = createFile(param_internalid, nameFileDesc, TEMPLATE_DESCUENTO, param_rectype, '', nota_descuento, montoParametro);
+                    }
+                }
+            }
+
+            log.debug('pdfBase64Cambio', pdfBase64Cambio);
+            log.debug('pdfBase64Descuento', pdfBase64Descuento);
             //log.debug('File', pdfBase64);
             let base64 = contetToBase64();
 
@@ -56,9 +109,14 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
             pageHTML += '<title>Connect Print</title>'
             pageHTML += '</head>'
             pageHTML += '<body>'
-            pageHTML += '<script src="https://6785603-sb1.app.netsuite.com/core/media/media.nl?id=38375&c=6785603_SB1&h=S89zDpxC_FM3F3Qmlt2vG4DpjPztsEFE8AHXMzqH231MY17o&_xt=.js"></script>'
-            pageHTML += '<script src="https://cdn.rawgit.com/kjur/jsrsasign/c057d3447b194fa0a3fdcea110579454898e093d/jsrsasign-all-min.js"></script>'
-            pageHTML += '<script src="https://6785603-sb1.app.netsuite.com/core/media/media.nl?id=38374&c=6785603_SB1&h=56fl1HFh05Byso6Q9Lfbu79U_MMPjg8VyxXkk0ebO6Kn6XGH&_xt=.js"></script>'
+            //!PR
+            pageHTML += '<script src="https://6785603.app.netsuite.com/core/media/media.nl?id=163608&c=6785603&h=69gNJdvbPv4JC5PbY1DClXhz3IFJXBRNdtcWbbMy4sGrVAXm&_xt=.js"></script>'
+            pageHTML += '<script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.8.6/jsrsasign-all-min.js"></script>'
+            pageHTML += '<script src="https://6785603.app.netsuite.com/core/media/media.nl?id=163607&c=6785603&h=5FKEiAzwm6rhp7MMKPaeRV1YtThAsb5gvtXAbXFe0L9lTnBQ&_xt=.js"></script>'
+            //!SB
+            // pageHTML += '<script src="https://6785603-sb1.app.netsuite.com/core/media/media.nl?id=38375&c=6785603_SB1&h=S89zDpxC_FM3F3Qmlt2vG4DpjPztsEFE8AHXMzqH231MY17o&_xt=.js"></script>'
+            // pageHTML += '<script src="https://cdn.rawgit.com/kjur/jsrsasign/c057d3447b194fa0a3fdcea110579454898e093d/jsrsasign-all-min.js"></script>'
+            // pageHTML += '<script src="https://6785603-sb1.app.netsuite.com/core/media/media.nl?id=38374&c=6785603_SB1&h=56fl1HFh05Byso6Q9Lfbu79U_MMPjg8VyxXkk0ebO6Kn6XGH&_xt=.js"></script>'
             pageHTML += '<script>'
             pageHTML += 'qz.security.setCertificatePromise(function (resolve, reject) {'
             pageHTML += 'resolve(\'' + base64 + '\');'
@@ -145,8 +203,41 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
             pageHTML += 'flavor: "base64",'
             pageHTML += 'data: \'' + pdfBase64Ticket + '\''
             pageHTML += ' }];'
+            if (pdfBase64Cambio != '') {
+                pageHTML += 'var data3 = [{'
+                pageHTML += 'type: "pixel",'
+                pageHTML += 'format: "pdf",'
+                pageHTML += 'flavor: "base64",'
+                pageHTML += 'data: \'' + pdfBase64Cambio + '\''
+                pageHTML += ' }];'
+            }
+            if (pdfBase64Descuento != '') {
+                pageHTML += 'var data4 = [{'
+                pageHTML += 'type: "pixel",'
+                pageHTML += 'format: "pdf",'
+                pageHTML += 'flavor: "base64",'
+                pageHTML += 'data: \'' + pdfBase64Descuento + '\''
+                pageHTML += ' }];'
+            }
+            if (pdfBase64TaxFree != '') {
+                pageHTML += 'var data5 = [{';
+                pageHTML += 'type: "pixel",';
+                pageHTML += 'format: "pdf",';
+                pageHTML += 'flavor: "base64",';
+                pageHTML += 'data: \'' + pdfBase64TaxFree + '\'';
+                pageHTML += ' }];';
+            }
             pageHTML += 'qz.print(config, data);'
             pageHTML += 'qz.print(config, data2);'
+            if (pdfBase64Cambio != '') {
+                pageHTML += 'qz.print(config, data3);'
+            }
+            if (pdfBase64Descuento != '') {
+                pageHTML += 'qz.print(config, data4);'
+            }
+            if (pdfBase64TaxFree != '') {
+                pageHTML += 'qz.print(config, data5);';
+            }
             pageHTML += 'return true;'
             pageHTML += '}).catch((e) => {'
             pageHTML += 'alert("Se presentó un inconveniente con la impresora o no tiene una impresora configurada: " + e);'
@@ -156,15 +247,16 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
             pageHTML += '</html>'
 
             //pageHTML += 'sfdsfsfsfssfsf'
-
+            log.debug('pageHTML-onRequest', pageHTML)
             form.addField({
                 id: 'custpage_canvas',
                 type: serverWidget.FieldType.INLINEHTML,
                 label: ' '
             }).defaultValue = pageHTML;
+            
             //form.addSubmitButton({ label: 'Save' });
-            // form.addButton({ id: 'btnBack', label: 'Regresar a Transacción', functionName: 'funcBack(' + param_internalid + ')' });
-            // form.addButton({ id: 'btnNew', label: 'Nueva Venta en Efectivo', functionName: 'funcNew()' });
+            //form.addButton({ id: 'btnBack', label: 'Regresar a Transacción', functionName: 'funcBack(' + param_internalid + ')' });
+            //form.addButton({ id: 'btnNew', label: 'Nueva Venta en Efectivo', functionName: 'funcNew()' });
             form.addButton({ id: 'btnBack', label: 'Regresar a Transacción', functionName: 'funcBack(' + param_internalid + ', "' + rec_url + '")' });
             form.addButton({ id: 'btnNew', label: 'Nueva ' + label_btn, functionName: 'funcNew("' + rec_url + '")' });
             context.response.writePage(form);
@@ -174,16 +266,35 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
     }
 
 
-    const createFile = (internalid, name, template, rectype) => {
+    const createFile = (internalid, name, template, rectype, notacambio, notadescuento, montototal) => {
         //const namefile = name + 'Z' + milisec;
         try {
             const xmlTemplateFile = file.load({ id: template });
             let renderer = render.create();
             let fileContent = xmlTemplateFile.getContents();
             //renderer.addRecord('record', record.load({ type: 'cashsale', id: internalid }));
-            log.debug('rectype', rectype);
-            log.debug('template', template);
             renderer.addRecord('record', record.load({ type: rectype, id: internalid }));
+            if (notacambio != '') {
+                renderer.addCustomDataSource({
+                    format: render.DataSource.OBJECT,
+                    alias: 'notecambio',
+                    data: {
+                        notacambio: notacambio,
+                        montototal: montototal
+                    }
+                });
+            }
+            log.error('montototal', montototal);
+            if (notadescuento != '') {
+                renderer.addCustomDataSource({
+                    format: render.DataSource.OBJECT,
+                    alias: 'notedesc',
+                    data: {
+                        notadescuento: notadescuento,
+                        montototal: montototal
+                    }
+                });
+            }
             renderer.templateContent = fileContent;
             const pdfFile = renderer.renderAsPdf();
 
@@ -205,6 +316,50 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
         }
     }
 
+    const getUbicacion = (param_location) => {
+        try {
+            var locationSearchObj = search.create({
+                type: "location",
+                filters:
+                    [
+                        ["internalid", "anyof", param_location]
+                    ],
+                columns:
+                    [
+                        search.createColumn({ name: "custrecord_pe_ticket_cambio", label: "TICKET DE CAMBIO" }),
+                        search.createColumn({ name: "custrecord_pe_finicio_ticket_cambio", label: "  FECHA DE INICIO - TICKET DE CAMBIO" }),
+                        search.createColumn({ name: "custrecord_pe_ffin_ticket_cambio", label: "FECHA FIN - TICKET DE CAMBIO" }),
+                        search.createColumn({ name: "custrecord_pe_mensaje_tipo_cambio", label: "MENSAJE - TICKET DE CAMBIO" }),
+                        search.createColumn({ name: "custrecord_pe_descuento_promo", label: "DESCUENTO PROMOCIONAL" }),
+                        search.createColumn({ name: "custrecord_pe_finicio_ticket_descuento", label: "FECHA DE INICIO - TICKET DE DESCUENTO" }),
+                        search.createColumn({ name: "custrecord_pe_ffin_ticket_descuento", label: "FECHA FIN - TICKET DE DESCUENTO" }),
+                        search.createColumn({ name: "custrecord_pe_monto_min_ticket_descuento", label: "MONTO MINIMO -  TICKET DE DESCUENTO" }),
+                        search.createColumn({ name: "custrecord_pe_mensaje_descuento", label: "MENSAJE - TICKET DE DESCUENTO" })
+                    ]
+            });
+            var savedsearch = locationSearchObj.run().getRange(0, 1);
+            var arr = [];
+            if (savedsearch.length > 0) {
+                locationSearchObj.run().each(function (result) {
+                    arr[0] = result.getValue(locationSearchObj.columns[0]);
+                    arr[1] = result.getValue(locationSearchObj.columns[1]);
+                    arr[2] = result.getValue(locationSearchObj.columns[2]);
+                    arr[3] = result.getValue(locationSearchObj.columns[3]);
+                    arr[4] = result.getValue(locationSearchObj.columns[4]);
+                    arr[5] = result.getValue(locationSearchObj.columns[5]);
+                    arr[6] = result.getValue(locationSearchObj.columns[6]);
+                    arr[7] = result.getValue(locationSearchObj.columns[7]);
+                    arr[8] = result.getValue(locationSearchObj.columns[8]);
+                    return true;
+                });
+            }
+            return arr;
+        } catch (error) {
+            log.error('error getUbicacion', error)
+            return [];
+        }
+    }
+
 
     const contetToBase64 = () => {
         // const fileToBase64 = file.create({
@@ -216,34 +371,35 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
         // });
         // const fileidBase64 = fileToBase64.save();
         const vari = "-----BEGIN CERTIFICATE-----" +
-            "MIIFEDCCAvigAwIBAgIQNzkyMDIzMDEzMTAxMTE0MTANBgkqhkiG9w0BAQsFADCB" +
+            "MIIFTzCCAzegAwIBAgIQNzkyMDI1MDEyNTE4MTkwMzANBgkqhkiG9w0BAQsFADCB" +
             "mDELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAk5ZMRswGQYDVQQKDBJRWiBJbmR1c3Ry" +
             "aWVzLCBMTEMxGzAZBgNVBAsMElFaIEluZHVzdHJpZXMsIExMQzEZMBcGA1UEAwwQ" +
             "cXppbmR1c3RyaWVzLmNvbTEnMCUGCSqGSIb3DQEJARYYc3VwcG9ydEBxemluZHVz" +
-            "dHJpZXMuY29tMB4XDTIzMDEzMTAxMTE0MVoXDTI0MDEyNTE1NDUyNlowgckxCzAJ" +
-            "BgNVBAYMAlBFMQ0wCwYDVQQIDARMaW1hMQ0wCwYDVQQHDARMaW1hMSYwJAYDVQQK" +
-            "DB0yMDI5NTc1NDQ0NCAtIEliZXJvIExpYnJlcmlhczEmMCQGA1UECwwdMjAyOTU3" +
-            "NTQ0NDQgLSBJYmVybyBMaWJyZXJpYXMxJjAkBgNVBAMMHTIwMjk1NzU0NDQ0IC0g" +
-            "SWJlcm8gTGlicmVyaWFzMSQwIgYJKoZIhvcNAQkBDBVzaXN0ZW1hc0BpYmVyby5j" +
-            "b20ucGUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCPGOIsyor6WZvJ" +
-            "JbR22LMXHYoDUhgpzaBCTOxa1h/tKMqknepLjk3m7Ot8AYIZRnwZK7bJAAtH4cJq" +
-            "P+KhCgmrn0G2UjZOoNKQ4kB2We9EREDunjkDa7gSVijPfd3Zj2lhPrCzbp0bebWF" +
-            "31NcEnnShOK7V4Iz49OasR9paka8YfX58zM/ZgT6t/PpT9lv+gIGGy8A9+Ytt1TU" +
-            "g4jZEZEmMXElMWFYbEe0oYkHOUBvq1+llt4l2G7uPfMfWd9YBsWaLEVeCO80m2d4" +
-            "SD5cgtGdGNqe8Zk6fLBWQgOTgrLDPV7OzxEZXBQ71h4OMbcEtt5NbjmWCnP+7/Hi" +
-            "JsmpKsd3AgMBAAGjIzAhMB8GA1UdIwQYMBaAFJCmULeE1LnqX/IFhBN4ReipdVRc" +
-            "MA0GCSqGSIb3DQEBCwUAA4ICAQCiFt9jNvnpKJ+fYohyNAom5p6fzrD6Pf66TgIc" +
-            "oAaylFtjNiSRxQRxV5stq9mqM6fwfbJQWtGxrXwLkTnK24xntK3cyJ5VouImFA4G" +
-            "2sUYxVdi8UpLnGAoiI7jfydL3I2qfPnoLOaAIhLxrCh1+yZBgP4zG+Fkx0jGlXFC" +
-            "oShM+VgopevugPeHsr/R6a5x9IVd9zWuCmKmPIe6eSMGPcwhjfLXEAcrcpy/0aYK" +
-            "xuwXiCeEXIr5clgIpOzzLBe2S2O3S4rB90XDEv9iXk3wUpYMrYcBj75Nr3Kpn8E8" +
-            "MvmJ8os1KUu0Te2d/aW6IYL3YgBMusbCiUpLOi2yasTTzHi55chw3Yp5tWzyjrid" +
-            "Eg6qBJ1uxu0jwNtoDIpVi038SFdbG8xN9G9jEZgUt++bHNZKkTMdWHspe6nvk+qo" +
-            "h4j2wB4qZhBzj/u5zesrSaAYLyr3bALrIVmXORfy/rn+8X6DJRT2k+Vznv+JHMPW" +
-            "KH577blo2zpNdVpG468mAQm3t4D8C+FI9zitvZByFzmG1zeFP/xYlFypNRXP0QF2" +
-            "ctzjykl+AOtm6Eh+EYCjnAPmgvL0Pu3bdt97lFQ3SiCJpkJNyARzZpzZK+mUrkdE" +
-            "xyJXHXFBzEDfTcjvbUzR5sQNjjU2P6KLT/IYXQ9tR67YdFjp1HoE2r1TPuv/EVCT" +
-            "C/rT4Q==" +
+            "dHJpZXMuY29tMB4XDTI1MDEyNTE4MTkwM1oXDTI2MDEyNTE3NTkzM1owggEHMQsw" +
+            "CQYDVQQGDAJQRTENMAsGA1UECAwETGltYTENMAsGA1UEBwwETGltYTEmMCQGA1UE" +
+            "CgwdMjAyOTU3NTQ0NDQgLSBJYmVybyBMaWJyZXJpYXMxJjAkBgNVBAsMHTIwMjk1" +
+            "NzU0NDQ0IC0gSWJlcm8gTGlicmVyaWFzMSYwJAYDVQQDDB0yMDI5NTc1NDQ0NCAt" +
+            "IEliZXJvIExpYnJlcmlhczEkMCIGCSqGSIb3DQEJAQwVc2lzdGVtYXNAaWJlcm8u" +
+            "Y29tLnBlMTwwOgYDVQQNDDNyZW5ld2FsLW9mLWJhMTMxYjM0MTQ2YzhlZGI3NWRh" +
+            "NmMyZTgxMjk3NDU0YTlmOWZmMGMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK" +
+            "AoIBAQCPGOIsyor6WZvJJbR22LMXHYoDUhgpzaBCTOxa1h/tKMqknepLjk3m7Ot8" +
+            "AYIZRnwZK7bJAAtH4cJqP+KhCgmrn0G2UjZOoNKQ4kB2We9EREDunjkDa7gSVijP" +
+            "fd3Zj2lhPrCzbp0bebWF31NcEnnShOK7V4Iz49OasR9paka8YfX58zM/ZgT6t/Pp" +
+            "T9lv+gIGGy8A9+Ytt1TUg4jZEZEmMXElMWFYbEe0oYkHOUBvq1+llt4l2G7uPfMf" +
+            "Wd9YBsWaLEVeCO80m2d4SD5cgtGdGNqe8Zk6fLBWQgOTgrLDPV7OzxEZXBQ71h4O" +
+            "MbcEtt5NbjmWCnP+7/HiJsmpKsd3AgMBAAGjIzAhMB8GA1UdIwQYMBaAFJCmULeE" +
+            "1LnqX/IFhBN4ReipdVRcMA0GCSqGSIb3DQEBCwUAA4ICAQA1gdy8c3fDmGzXK5S4" +
+            "+x1obCv3sA0oz4o4t6Zc7Jc6GQosiRmxnxivv7LM/My60vjMOiUIsn4QIdYFg7u2" +
+            "6hU2G16nIBr0p31r8pJoYjSLNnlcmEtJ7QaOXudt31mwle/J90paYWHVt+i5iDbh" +
+            "tO5qGqESXQ4gCVvEMAOQhG4S+muZ3Pjo/zGdU3d6ET/zMk8L/Gls2nJTF0n6vryp" +
+            "w6j5vBEtzof0UrOciIhtl+Rd0yiHZOgmWCXL3EmQEaCDrdhOa6dIKi0e7ffhKYK0" +
+            "6EMmvb4QMMa64h8bPYqz8uHBrIn/YJvIpCSyl844TVATR4mZiaapnZ2cSsRTpoBo" +
+            "mXmg4G4JXEScQGU9eTQ62JqH4Q19UhAfQ0LufXygpAdXhdDPwGywpCQ4koQXl7+6" +
+            "cJIDAP8zas/y/t7w7F5Y0wpJjEDg3CQsChh5iKSsEGtduPSHqbYI+ZoSVCcwyw92" +
+            "mVa+iLed+47JkJzBAy9d520lFmF1RDYCG9n44rXZk88cWA4UWIo/qDOyNDBADeih" +
+            "8WNQkakDHA2i3/v5gCL7WebgN7XCIYHyDL3R05wEdpYKlf3L7WuTx5ce/gwhrET3" +
+            "TgBjSm2AcAh28vIdtFYunx6dLkNk11SVR96SnsFjwrfQPDuyAwRgFZ0sXfMhw23T" +
+            "Nc8mo5qEu7zg3F5HuSH6RQ6WlQ==" +
             "-----END CERTIFICATE-----" +
             "--START INTERMEDIATE CERT--" +
             "-----BEGIN CERTIFICATE-----" +
@@ -276,6 +432,7 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
             "2ur4rDErnHsiphBgZB71C5FD4cdfSONTsYxmPmyUb5T+KLUouxZ9B0Wh28ucc1Lp" +
             "rbO7BnjW" +
             "-----END CERTIFICATE-----"
+
 
 
         let base64 = "JVBERi0xLjMKJd/++LIKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFIvTGFuZyhlbi1VUykvTmFtZXMgNCAwIFIvTWV0YWRhdGEgNSAwIFI+PgplbmRvYmoK" +
@@ -544,6 +701,11 @@ define(['N/ui/serverWidget', 'N/log', 'N/render', 'N/file', 'N/record'], (server
             "DgzOTk0MTQyOWU1MGVjOTQ1PjxmNTgyNTZlMDAwMDBmMDg4YmRhMThiZDAxZThjZWY1ZT5dL1NpemUgMTk+PgpzdGFydHhyZWYKMjA4NDQKJSVFT0YK"
 
         return vari;
+    }
+
+    function parseDate(dateStr) {
+        var parts = dateStr.split('/');
+        return new Date(parts[2], parts[1] - 1, parts[0]);
     }
 
     return {

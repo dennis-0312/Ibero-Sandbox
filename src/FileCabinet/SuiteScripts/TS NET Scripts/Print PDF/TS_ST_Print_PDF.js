@@ -45,8 +45,8 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
           var type_doc = context.request.parameters.custpage_typerec;
           var is_fel = context.request.parameters.custpage_fel;
 
-          log.debug('type_doc',type_doc);
-          log.debug('rec_id',rec_id);
+          log.debug('type_doc', type_doc);
+          log.debug('rec_id', rec_id);
           var rec = record.load({ type: type_doc, id: rec_id });
 
           if (type_doc == 'itemfulfillment') {
@@ -77,8 +77,8 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
 
             var recRel = record.load({ type: typeTransaction, id: idRecRel });
 
-            log.debug('typeTransaction',typeTransaction);
-            log.debug('idRecRel',idRecRel);
+            log.debug('typeTransaction', typeTransaction);
+            log.debug('idRecRel', idRecRel);
             // INFORMACIÓN DEL CUSTOMER
             var infoCustomer = record.load({
               type: typeEntity,
@@ -541,7 +541,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
                     ["internalid", "anyof", rec_id]
                   ],
                 columns:
-                  [                    
+                  [
                     search.createColumn({
                       name: "custbody_pe_motivo_traslado",
                       label: "0. GRC_motivoTraslado"
@@ -576,13 +576,13 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
                       formula: "CONCAT({custbody_pe_serie}, CONCAT('-', {custbody_pe_number}))",
                       label: "6.IDE_numeracion"
                     }),
-                    search.createColumn({ 
-                      name: "custbody_pe_direccion_punto_partida", 
-                      label: "7.GRC_direccionPuntoPartida" 
+                    search.createColumn({
+                      name: "custbody_pe_direccion_punto_partida",
+                      label: "7.GRC_direccionPuntoPartida"
                     }),
-                    search.createColumn({ 
-                      name: "custbody_pe_direccion_punto_llegada", 
-                      label: "8.GRC_direccionPuntoLlegada" 
+                    search.createColumn({
+                      name: "custbody_pe_direccion_punto_llegada",
+                      label: "8.GRC_direccionPuntoLlegada"
                     }),
                     search.createColumn({
                       name: "custbody_pe_peso_tn",
@@ -636,18 +636,18 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
             var linesRecRel = recRel.getLineCount('item');
             var arrayItemsRecRel = [];
             for (var k = 0; k < linesRecRel; k++) {
-              arrayItemsRecRel.push({ 'item': recRel.getSublistValue('item', 'item', k), 'rate': recRel.getSublistValue('item', 'rate', k), 'tax1amt': recRel.getSublistValue('item', 'tax1amt', k),'grossamt': recRel.getSublistValue('item', 'grossamt', k)})
+              arrayItemsRecRel.push({ 'item': recRel.getSublistValue('item', 'item', k), 'rate': recRel.getSublistValue('item', 'rate', k), 'tax1amt': recRel.getSublistValue('item', 'tax1amt', k), 'grossamt': recRel.getSublistValue('item', 'grossamt', k) })
             }
             var totalDscto = 0;
-            for (var i = 0; i < arrayItemsRecRel.length; i++){
+            for (var i = 0; i < arrayItemsRecRel.length; i++) {
               var compararID = getItemDscto(arrayItemsRecRel[i].item);
-              if(compararID == arrayItemsRecRel[i].item){
+              if (compararID == arrayItemsRecRel[i].item) {
                 var sumaDscto = arrayItemsRecRel[i].grossamt;
                 totalDscto += sumaDscto;
               }
             }
-            log.debug('totalDscto',totalDscto);
-            totalDscto = Number(totalDscto)*-1
+            log.debug('totalDscto', totalDscto);
+            totalDscto = Number(totalDscto) * -1
             // LINEAS DE ITEMS
             var item_lines = rec.getLineCount('item');
             var items = [];
@@ -664,30 +664,30 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
               var item_units = rec.getSublistText('item', 'unitsdisplay', i);
               var rateRecRel = findRate(arrayItemsRecRel, item_id);
               var taxamount = findTax(arrayItemsRecRel, item_id);
-              log.debug('taxamount',taxamount);
-              var total = Number((Number(item_quantity) * (Number(rateRecRel) + (Number(taxamount)/Number(item_quantity))).toFixed(2)).toFixed(2)).toFixed(2);
-              subtotal[i] = Number(total)+ Number(totalconigv);
-              totalconigv  = Number(subtotal[i]);
+              log.debug('taxamount', taxamount);
+              var total = Number((Number(item_quantity) * (Number(rateRecRel) + (Number(taxamount) / Number(item_quantity))).toFixed(2)).toFixed(2)).toFixed(2);
+              subtotal[i] = Number(total) + Number(totalconigv);
+              totalconigv = Number(subtotal[i]);
               unidades[i] = Number(item_quantity) + Number(total_unidades);
               total_unidades = Number(unidades[i]);
               var json_item = {
                 "item": item_name,
                 "description": item_descripcion,
-                "taxamount": (Number(taxamount)/Number(item_quantity)).toFixed(2),
-                "pvp": (Number(rateRecRel)+(Number(taxamount)/Number(item_quantity))).toFixed(2),
+                "taxamount": (Number(taxamount) / Number(item_quantity)).toFixed(2),
+                "pvp": (Number(rateRecRel) + (Number(taxamount) / Number(item_quantity))).toFixed(2),
                 "quantity": item_quantity,
                 "units": item_units,
                 "upc": item_upc,
-                "total": Number((Number(item_quantity) * (Number(rateRecRel)+(Number(taxamount)/Number(item_quantity))).toFixed(2)).toFixed(2)).toFixed(2),
+                "total": Number((Number(item_quantity) * (Number(rateRecRel) + (Number(taxamount) / Number(item_quantity))).toFixed(2)).toFixed(2)).toFixed(2),
                 "preciounitario": Number(rateRecRel).toFixed(2),
               }
               items.push(json_item);
             }
-            log.debug('totalconigv',totalconigv);
+            log.debug('totalconigv', totalconigv);
             xmlJSON.location = rec.getSublistText('item', 'location', 0);
             xmlJSON.subtotal = totalconigv.toFixed(2);
             xmlJSON.sumaDscto = totalDscto.toFixed(2);
-            xmlJSON.totalEmision = Number(Number(totalconigv)-Number(totalDscto)).toFixed(2);
+            xmlJSON.totalEmision = Number(Number(totalconigv) - Number(totalDscto)).toFixed(2);
             xmlJSON.unidades = total_unidades;
             xmlJSON.item = items;
 
@@ -728,45 +728,45 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
 
     }
 
-      function getItemDscto(id) {
-        try {
-            var arrItemId = new Array();
-            var busqueda = search.create({
-              type: "discountitem",
-              filters:
-              [
-                 ["type","anyof","Discount"],
-                 "AND",
-                 ["internalid","anyof",id]
-              ],
-              columns:
-              [
-                 search.createColumn({name: "internalid", label: "Internal ID"})
-              ]
-           });
-            var pageData = busqueda.runPaged({
-                pageSize: 1000
-            });
+    function getItemDscto(id) {
+      try {
+        var arrItemId = new Array();
+        var busqueda = search.create({
+          type: "discountitem",
+          filters:
+            [
+              ["type", "anyof", "Discount"],
+              "AND",
+              ["internalid", "anyof", id]
+            ],
+          columns:
+            [
+              search.createColumn({ name: "internalid", label: "Internal ID" })
+            ]
+        });
+        var pageData = busqueda.runPaged({
+          pageSize: 1000
+        });
 
-            pageData.pageRanges.forEach(function (pageRange) {
-                page = pageData.fetch({
-                    index: pageRange.index
-                });
-                page.data.forEach(function (result) {
-                    var columns = result.columns;
-                    var arrDscto = new Array();
-                    //0. Internal id match
-                    if (result.getValue(columns[0]) != null)
-                    arrDscto[0] = result.getValue(columns[0]);
-                    else
-                    arrDscto[0] = '';
-                        arrItemId.push(arrDscto);
-                    });
-                });
-            return arrItemId;
-        } catch (e) {
-            log.error('Error en getCustomer', e);
-        }
+        pageData.pageRanges.forEach(function (pageRange) {
+          page = pageData.fetch({
+            index: pageRange.index
+          });
+          page.data.forEach(function (result) {
+            var columns = result.columns;
+            var arrDscto = new Array();
+            //0. Internal id match
+            if (result.getValue(columns[0]) != null)
+              arrDscto[0] = result.getValue(columns[0]);
+            else
+              arrDscto[0] = '';
+            arrItemId.push(arrDscto);
+          });
+        });
+        return arrItemId;
+      } catch (e) {
+        log.error('Error en getCustomer', e);
+      }
     }
     function findRate(_array, _id_item) {
       try {
@@ -788,24 +788,24 @@ define(['N/ui/serverWidget', 'N/record', 'N/render', 'N/file', 'N/search', 'N/ru
 
     }
     function findTax(_array, _id_item) {
-        try {
-          var rate = 0;
-          var tax1amt = 0;
-          for (var j = 0; j < _array.length; j++) {
-            if (_array[j]['item'] === _id_item) {
-              tax1amt = _array[j]['tax1amt'];
-              break;
-            } else {
-              continue;
-            }
+      try {
+        var rate = 0;
+        var tax1amt = 0;
+        for (var j = 0; j < _array.length; j++) {
+          if (_array[j]['item'] === _id_item) {
+            tax1amt = _array[j]['tax1amt'];
+            break;
+          } else {
+            continue;
           }
-          return tax1amt;
-  
-        } catch (e) {
-          log.error("Error", "[ findTax ] " + e);
         }
-  
+        return tax1amt;
+
+      } catch (e) {
+        log.error("Error", "[ findTax ] " + e);
       }
+
+    }
 
 
 
